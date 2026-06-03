@@ -118,32 +118,50 @@ export class JiraService {
     issueKey: string,
     targetStatusName: string,
   ): Promise<void> {
-    const transitions = await this.getTransitions(issueKey);
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const transitions = await this.getTransitions(issueKey);
 
-    // Match by destination status name first, then by transition name
-    const target =
-      transitions.find(
-        (t) => t.to?.name.toLowerCase() === targetStatusName.toLowerCase(),
-      ) ??
-      transitions.find(
-        (t) => t.name.toLowerCase() === targetStatusName.toLowerCase(),
+      const target =
+        transitions.find(
+          (t) => t.to?.name.toLowerCase() === targetStatusName.toLowerCase(),
+        ) ??
+        transitions.find(
+          (t) => t.name.toLowerCase() === targetStatusName.toLowerCase(),
+        );
+
+      if (target) {
+        await this.client.post(`/issue/${issueKey}/transitions`, {
+          transition: { id: target.id },
+        });
+        this.logger.log(
+          `Transitioned ${issueKey} to "${targetStatusName}" via "${target.name}"`,
+        );
+        return;
+      }
+
+      // No direct transition — pick the first one that actually changes status
+      const forward = transitions.find(
+        (t) => t.to && t.to.name !== t.name,
       );
+      if (!forward) {
+        const list = transitions
+          .map((t) => `${t.name}${t.to ? ` → ${t.to.name}` : ""}`)
+          .join(", ");
+        throw new Error(
+          `Transition to "${targetStatusName}" not found for ${issueKey}. Available: ${list}`,
+        );
+      }
 
-    if (!target) {
-      const list = transitions
-        .map((t) => `${t.name}${t.to ? ` → ${t.to.name}` : ""}`)
-        .join(", ");
-      throw new Error(
-        `Transition to "${targetStatusName}" not found for ${issueKey}. Available: ${list}`,
+      await this.client.post(`/issue/${issueKey}/transitions`, {
+        transition: { id: forward.id },
+      });
+      this.logger.log(
+        `Stepping ${issueKey}: "${forward.name}" → "${forward.to!.name}" (toward "${targetStatusName}")`,
       );
     }
 
-    await this.client.post(`/issue/${issueKey}/transitions`, {
-      transition: { id: target.id },
-    });
-
-    this.logger.log(
-      `Transitioned ${issueKey} to "${targetStatusName}" via "${target.name}"`,
+    throw new Error(
+      `Could not reach "${targetStatusName}" for ${issueKey} after 10 transitions`,
     );
   }
 
