@@ -9,6 +9,7 @@ RUN pnpm run build
 RUN pnpm prune --prod
 
 FROM node:22-alpine AS runner
+RUN apk add --no-cache tzdata
 RUN addgroup --system --gid 1001 nestjs && \
     adduser --system --uid 1001 --ingroup nestjs nestjs
 WORKDIR /app

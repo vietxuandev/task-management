@@ -9,6 +9,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+      - TZ=${TIMEZONE:-Asia/Ho_Chi_Minh}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health',(r)=>{process.exit(r.statusCode===200?0:1)})"]
       interval: 30s
