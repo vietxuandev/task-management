@@ -42,7 +42,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Copy compose file to VPS
-        uses: appleboy/scp-action@v0
+        uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.VPS_IP }}
           username: ${{ secrets.VPS_USER }}
