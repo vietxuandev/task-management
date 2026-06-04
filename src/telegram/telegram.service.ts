@@ -9,7 +9,7 @@ import { Telegraf, Context } from "telegraf";
 import { SessionService } from "../session/session.service";
 import { JiraService } from "../jira/jira.service";
 import { BlueprintService } from "../blueprint/blueprint.service";
-import { SubTask } from "../jira/jira.types";
+import { SubTask, JiraTransition } from "../jira/jira.types";
 
 @Injectable()
 export class TelegramService implements OnModuleInit, OnModuleDestroy {
@@ -246,8 +246,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       await this.handleTicketSelection(ctx, input, session);
     } else if (step === "AWAIT_HOURS") {
       await this.handleHours(ctx, input, session);
-    } else if (step === "AWAIT_DONE_CONFIRM") {
-      await this.handleDoneConfirm(ctx, input, session);
+    } else if (step === "AWAIT_STATUS_CHANGE") {
+      await this.handleStatusChange(ctx, input, session);
+    } else if (step === "AWAIT_CONTINUE_STATUS_CHANGE") {
+      await this.handleContinueStatusChange(ctx, input, session);
     }
   }
 
@@ -300,43 +302,107 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       `✅ Logged ${JiraService.formatTime(seconds)} to ${this.formatTicketLink(key)}`,
     );
 
-    const details = await this.jiraService.getSubTaskDetails(key);
-    if (
-      JiraService.isEstimateExceeded(
-        details.timeoriginalestimate,
-        details.timespent,
-        0,
-      )
-    ) {
-      session.step = "AWAIT_DONE_CONFIRM";
-      this.sessionService.setSession(this.chatId, session);
-      await ctx.reply('Mark as Done? Reply "yes" or "no"');
-    } else {
+    // Fetch available transitions and ask user to pick one
+    const transitions = await this.jiraService.getTransitions(key);
+    const validTransitions = transitions.filter((t) => t.to);
+
+    if (validTransitions.length === 0) {
+      await ctx.reply("No status transitions available for this ticket.");
       this.sessionService.clearSession(this.chatId);
+      return;
     }
+
+    session.data["transitions"] = validTransitions;
+    session.step = "AWAIT_STATUS_CHANGE";
+    this.sessionService.setSession(this.chatId, session);
+
+    const transitionsList = validTransitions
+      .map((t, i) => `  <b>${i + 1}.</b> ${t.to.name}`)
+      .join("\n");
+
+    await ctx.replyWithHTML(
+      `Do you want to change the status? Available:\n${transitionsList}\n\n<i>Reply with a number, or "no" to skip.</i>`,
+    );
   }
 
-  private async handleDoneConfirm(
+  private async handleStatusChange(
     ctx: Context,
     input: string,
     session: NonNullable<ReturnType<SessionService["getSession"]>>,
   ): Promise<void> {
     const key = session.data["selectedKey"] as string;
-    const answer = input.toLowerCase().trim();
+    const transitions = session.data["transitions"] as JiraTransition[];
 
-    if (answer === "yes") {
-      await this.jiraService.transitionIssue(key, "Done");
-      await ctx.replyWithHTML(
-        `✅ ${this.formatTicketLink(key)} marked as Done!`,
-      );
-    } else if (answer === "no") {
+    const answer = input.toLowerCase().trim();
+    if (answer === "no") {
       await ctx.reply("👍 Good work!");
-    } else {
-      await ctx.reply('Please reply "yes" or "no".');
+      this.sessionService.clearSession(this.chatId);
       return;
     }
 
-    this.sessionService.clearSession(this.chatId);
+    const num = parseInt(input, 10);
+    if (isNaN(num) || num < 1 || num > transitions.length) {
+      await ctx.reply(
+        `Please reply with a number between 1 and ${transitions.length}, or "no".`,
+      );
+      return;
+    }
+
+    const selected = transitions[num - 1]!;
+    const targetStatus = selected.to.name;
+
+    await this.jiraService.transitionIssue(key, targetStatus);
+    await ctx.replyWithHTML(
+      `✅ ${this.formatTicketLink(key)} → <b>${targetStatus}</b>`,
+    );
+
+    if (targetStatus.toLowerCase() === "done") {
+      await ctx.reply("🎉 Ticket is Done! Great work!");
+      this.sessionService.clearSession(this.chatId);
+    } else {
+      session.step = "AWAIT_CONTINUE_STATUS_CHANGE";
+      this.sessionService.setSession(this.chatId, session);
+      await ctx.reply(
+        'Do you want to continue changing status? Reply "yes" or "no".',
+      );
+    }
+  }
+
+  private async handleContinueStatusChange(
+    ctx: Context,
+    input: string,
+    session: NonNullable<ReturnType<SessionService["getSession"]>>,
+  ): Promise<void> {
+    const answer = input.toLowerCase().trim();
+    const key = session.data["selectedKey"] as string;
+
+    if (answer === "yes") {
+      const transitions = await this.jiraService.getTransitions(key);
+      const validTransitions = transitions.filter((t) => t.to);
+
+      if (validTransitions.length === 0) {
+        await ctx.reply("No status transitions available for this ticket.");
+        this.sessionService.clearSession(this.chatId);
+        return;
+      }
+
+      session.data["transitions"] = validTransitions;
+      session.step = "AWAIT_STATUS_CHANGE";
+      this.sessionService.setSession(this.chatId, session);
+
+      const transitionsList = validTransitions
+        .map((t, i) => `  <b>${i + 1}.</b> ${t.to.name}`)
+        .join("\n");
+
+      await ctx.replyWithHTML(
+        `Available transitions:\n${transitionsList}\n\n<i>Reply with a number, or "no" to skip.</i>`,
+      );
+    } else if (answer === "no") {
+      await ctx.reply("👍 Good work!");
+      this.sessionService.clearSession(this.chatId);
+    } else {
+      await ctx.reply('Please reply "yes" or "no".');
+    }
   }
 
   // ── helpers ──
