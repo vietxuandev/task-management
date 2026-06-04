@@ -1,5 +1,5 @@
-import { Global, Module } from '@nestjs/common';
-import { SessionService } from './session.service';
+import { Global, Module } from "@nestjs/common";
+import { SessionService } from "./session.service";
 
 @Global()
 @Module({

@@ -1,5 +1,5 @@
-import { Global, Module } from '@nestjs/common';
-import { JiraService } from './jira.service';
+import { Global, Module } from "@nestjs/common";
+import { JiraService } from "./jira.service";
 
 @Global()
 @Module({

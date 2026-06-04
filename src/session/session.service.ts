@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { SessionState } from '../jira/jira.types';
+import { Injectable, Logger } from "@nestjs/common";
+import { SessionState } from "../jira/jira.types";
 
 @Injectable()
 export class SessionService {
@@ -8,7 +8,9 @@ export class SessionService {
 
   setSession(chatId: string, session: SessionState): void {
     this.sessions.set(chatId, session);
-    this.logger.log(`Session set for ${chatId}: type=${session.type} step=${session.step}`);
+    this.logger.log(
+      `Session set for ${chatId}: type=${session.type} step=${session.step}`,
+    );
   }
 
   getSession(chatId: string): SessionState | undefined {

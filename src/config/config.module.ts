@@ -21,8 +21,10 @@ import * as Joi from 'joi';
         BLUEPRINT_URL: Joi.string().uri().optional().allow(''),
         BLUEPRINT_USERNAME: Joi.string().optional().allow(''),
         BLUEPRINT_PASSWORD: Joi.string().optional().allow(''),
-        BLUEPRINT_PUNCH_IN_CRON: Joi.string().default('10 8 * * 1-5'),
-        BLUEPRINT_PUNCH_OUT_CRON: Joi.string().default('45 17 * * 1-5'),
+        PUNCH_IN_START: Joi.string().default('08:00'),
+        PUNCH_IN_END: Joi.string().default('08:20'),
+        PUNCH_OUT_START: Joi.string().default('17:40'),
+        PUNCH_OUT_END: Joi.string().default('18:00'),
       }),
       validationOptions: {
         allowUnknown: true,

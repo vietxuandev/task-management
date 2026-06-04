@@ -140,9 +140,7 @@ export class JiraService {
       }
 
       // No direct transition — pick the first one that actually changes status
-      const forward = transitions.find(
-        (t) => t.to && t.to.name !== t.name,
-      );
+      const forward = transitions.find((t) => t.to && t.to.name !== t.name);
       if (!forward) {
         const list = transitions
           .map((t) => `${t.name}${t.to ? ` → ${t.to.name}` : ""}`)

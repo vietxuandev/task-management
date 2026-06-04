@@ -25,7 +25,7 @@ export interface WorklogResult {
 }
 
 export interface SessionState {
-  type: 'morning' | 'evening';
+  type: "morning" | "evening";
   step: string;
   data: Record<string, unknown>;
   expiresAt: Date;

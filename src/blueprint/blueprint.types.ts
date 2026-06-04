@@ -19,5 +19,5 @@ export interface DailyAttendanceResponse {
 }
 
 export const DayTypeCode = {
-  BUSINESS: 'B',
+  BUSINESS: "B",
 } as const;

@@ -33,11 +33,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit(): Promise<void> {
-    await this.bot.telegram.setMyCommands([
-      { command: "checkin", description: "Trigger morning check-in manually" },
-      { command: "checkout", description: "Trigger evening check-in manually" },
-      { command: "punch", description: "Manual Blueprint punch" },
-    ]);
+    this.bot.telegram
+      .setMyCommands([
+        { command: "checkin", description: "Trigger morning check-in manually" },
+        { command: "checkout", description: "Trigger evening check-in manually" },
+        { command: "punch", description: "Manual Blueprint punch" },
+      ])
+      .catch((err) => this.logger.error("Failed to set bot commands", err));
 
     this.bot.command("checkin", (ctx) => this.triggerMorningCheckIn(ctx));
     this.bot.command("checkout", (ctx) => this.triggerEveningCheckIn(ctx));
@@ -50,8 +52,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       await next();
     });
 
-    await this.bot.launch();
-    this.logger.log("Telegram bot launched");
+    this.bot
+      .launch()
+      .then(() => this.logger.log("Telegram bot launched"))
+      .catch((err) => this.logger.error("Failed to launch Telegram bot", err));
   }
 
   async onModuleDestroy(): Promise<void> {

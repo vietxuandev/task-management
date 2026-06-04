@@ -1,1 +1,1 @@
-export const COOKIE_NAME = 'JSESSIONID';
+export const COOKIE_NAME = "JSESSIONID";
