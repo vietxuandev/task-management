@@ -246,4 +246,47 @@ export class JiraService {
     const totalSpent = (spent ?? 0) + newLogSeconds;
     return totalSpent >= estimate;
   }
+
+  async getTodayWorklogTotal(): Promise<number> {
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: this.timezone,
+    });
+
+    const jql = `worklogDate >= "${today}" AND worklogAuthor = currentUser() AND project = "${this.projectKey}"`;
+
+    const { data } = await this.client.post<{
+      issues: Array<{ key: string }>;
+    }>("/search/jql", {
+      jql,
+      fields: ["key"],
+      maxResults: 100,
+    });
+
+    let totalSeconds = 0;
+
+    for (const issue of data.issues) {
+      const worklogRes = await this.client.get<{
+        worklogs: Array<{
+          timeSpentSeconds: number;
+          author: { accountId: string };
+          started: string;
+        }>;
+      }>(`/issue/${issue.key}/worklog`);
+
+      for (const wl of worklogRes.data.worklogs) {
+        const worklogDate = wl.started?.split("T")[0];
+        if (
+          worklogDate === today &&
+          wl.author?.accountId === this.accountId
+        ) {
+          totalSeconds += wl.timeSpentSeconds;
+        }
+      }
+    }
+
+    this.logger.log(
+      `Today's worklog total: ${JiraService.formatTime(totalSeconds)}`,
+    );
+    return totalSeconds;
+  }
 }

@@ -67,7 +67,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.bot.telegram.sendMessage(this.chatId, text, {
         parse_mode: "HTML",
-      });
+        link_preview_options: { is_disabled: true },
+      } as any);
       this.logger.log("Message sent to Telegram");
     } catch (error) {
       this.logger.error("Failed to send Telegram message", error);
@@ -110,16 +111,20 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     try {
       const subTasks = await this.jiraService.getMySubTasks();
       const incomplete = subTasks.filter((t) => t.status !== "Done");
+      const todaySeconds = await this.jiraService.getTodayWorklogTotal();
 
       if (incomplete.length === 0) {
-        await this.sendOrReply(
-          ctx,
-          "🎉 All sub-tasks are done! Great work today!",
-        );
+        const msg =
+          "🎉 All sub-tasks are done! Great work today!\n\n" +
+          this.formatDailyProgress(todaySeconds);
+        await this.sendOrReply(ctx, msg);
         return;
       }
 
-      const message = this.buildEveningMessage(incomplete);
+      const message =
+        this.buildEveningMessage(incomplete) +
+        "\n" +
+        this.formatDailyProgress(todaySeconds);
       await this.sendOrReply(ctx, message);
 
       const expiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000);
@@ -223,6 +228,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     await this.jiraService.transitionIssue(selected.key, "In Progress");
     await ctx.replyWithHTML(
       `✅ ${this.formatTicketLink(selected.key)} is now In Progress!`,
+      { link_preview_options: { is_disabled: true } } as any,
     );
 
     this.sessionService.clearSession(this.chatId);
@@ -275,6 +281,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
     await ctx.replyWithHTML(
       `How many hours for ${this.formatTicketLink(selected.key)} ${selected.summary}? (Default: ${this.defaultLogHours}h)`,
+      { link_preview_options: { is_disabled: true } } as any,
     );
   }
 
@@ -300,6 +307,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     await this.jiraService.logWork(key, seconds, "Daily work log");
     await ctx.replyWithHTML(
       `✅ Logged ${JiraService.formatTime(seconds)} to ${this.formatTicketLink(key)}`,
+      { link_preview_options: { is_disabled: true } } as any,
     );
 
     // Fetch available transitions and ask user to pick one
@@ -322,6 +330,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
     await ctx.replyWithHTML(
       `Do you want to change the status? Available:\n${transitionsList}\n\n<i>Reply with a number, or "no" to skip.</i>`,
+      { link_preview_options: { is_disabled: true } } as any,
     );
   }
 
@@ -354,6 +363,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     await this.jiraService.transitionIssue(key, targetStatus);
     await ctx.replyWithHTML(
       `✅ ${this.formatTicketLink(key)} → <b>${targetStatus}</b>`,
+      { link_preview_options: { is_disabled: true } } as any,
     );
 
     if (targetStatus.toLowerCase() === "done") {
@@ -396,6 +406,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
       await ctx.replyWithHTML(
         `Available transitions:\n${transitionsList}\n\n<i>Reply with a number, or "no" to skip.</i>`,
+        { link_preview_options: { is_disabled: true } } as any,
       );
     } else if (answer === "no") {
       await ctx.reply("👍 Good work!");
@@ -412,7 +423,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     text: string,
   ): Promise<void> {
     if (ctx) {
-      await ctx.replyWithHTML(text);
+      await ctx.replyWithHTML(text, {
+        link_preview_options: { is_disabled: true },
+      } as any);
     } else {
       await this.sendMessage(text);
     }
@@ -424,7 +437,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     if (inProgress.length > 0) {
       msg += "\n<b>🔄 In Progress:</b>\n";
       for (const t of inProgress) {
-        msg += this.formatTicketLine(t, null);
+        msg += this.formatTicketLine(t, null, false);
       }
     } else {
       msg += "\n<b>🔄 In Progress:</b> (none)\n";
@@ -433,7 +446,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     if (todo.length > 0) {
       msg += "\n<b>📋 To Do:</b>\n";
       for (let i = 0; i < todo.length; i++) {
-        msg += this.formatTicketLine(todo[i]!, i + 1);
+        msg += this.formatTicketLine(todo[i]!, i + 1, false);
       }
     } else {
       msg += "\n<b>📋 To Do:</b> (none)\n";
@@ -447,25 +460,73 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     let msg = "<b>🌙 Evening check-in! Log your time:</b>\n\n";
 
     for (let i = 0; i < subTasks.length; i++) {
-      msg += this.formatTicketLine(subTasks[i]!, i + 1);
+      msg += this.formatTicketLine(subTasks[i]!, i + 1, true);
     }
 
     msg += '\n<i>Reply with a number to log time, or "skip" to skip.</i>';
     return msg;
   }
 
-  private formatTicketLine(t: SubTask, num: number | null): string {
-    const estimate = JiraService.formatTime(t.timeoriginalestimate);
-    const logged = JiraService.formatTime(t.timespent);
-    const remaining = JiraService.formatTime(t.timeestimate);
-    const parentInfo = t.parent
-      ? ` (👆 ${this.formatTicketLink(t.parent.key)})`
-      : "";
+  private formatTicketLine(
+    t: SubTask,
+    num: number | null,
+    showStatus: boolean,
+  ): string {
+    const parentInfo =
+      t.parent
+        ? ` (<a href="${this.jiraBaseUrl}/browse/${t.parent.key}">👆 ${t.parent.key}</a>)`
+        : "";
     const prefix =
       num !== null
         ? `  <b>${num}.</b>`
-        : "  •";
-    return `${prefix} <b>${this.formatTicketLink(t.key)}</b>${parentInfo} — ${t.summary}\n      Est: ${estimate} | Logged: ${logged} | Remaining: ${remaining}\n\n`;
+        : "  -";
+
+    const est = JiraService.formatTime(t.timeoriginalestimate);
+    const logged = JiraService.formatTime(t.timespent);
+    const left = JiraService.formatTime(t.timeestimate);
+    const statsLine = `    ⏱ Est: ${est} | ✅ Logged: ${logged} | ⏳ Left: ${left}`;
+
+    const progressLine = this.formatProgress(
+      t.timespent,
+      t.timeoriginalestimate,
+      showStatus,
+    );
+
+    return `${prefix} <a href="${this.jiraBaseUrl}/browse/${t.key}">${t.key}</a>${parentInfo} — ${t.summary}\n${statsLine}${progressLine}\n\n`;
+  }
+
+  private formatProgress(
+    spent: number | null,
+    estimate: number | null,
+    showStatus: boolean,
+  ): string {
+    if (!estimate || estimate === 0) return "";
+    const effectiveSpent = spent ?? 0;
+    const ratio = Math.min(effectiveSpent / estimate, 1);
+    const pct = Math.round(ratio * 100);
+    const filled = Math.round(ratio * 8);
+    const empty = 8 - filled;
+    const bar = "▓".repeat(filled) + "░".repeat(empty);
+    const emoji = showStatus ? ` ${this.formatStatusEmoji(pct)}` : "";
+    return `\n    ${bar} ${pct}%${emoji}`;
+  }
+
+  private formatStatusEmoji(pct: number): string {
+    if (pct >= 100) return "✅";
+    if (pct >= 75) return "🟢";
+    if (pct >= 50) return "🟡";
+    if (pct >= 25) return "🟠";
+    return "🔴";
+  }
+
+  private formatDailyProgress(todaySeconds: number): string {
+    const dailyTarget = 7 * 3600; // 7h in seconds
+    const ratio = Math.min(todaySeconds / dailyTarget, 1);
+    const pct = Math.round(ratio * 100);
+    const filled = Math.round(ratio * 8);
+    const empty = 8 - filled;
+    const bar = "▓".repeat(filled) + "░".repeat(empty);
+    return `<b>📊 Today:</b> ${bar} ${pct}% | ${JiraService.formatTime(todaySeconds)} / 7h`;
   }
 
   private formatTicketLink(key: string): string {
