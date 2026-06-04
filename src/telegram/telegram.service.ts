@@ -506,7 +506,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     const pct = Math.round(ratio * 100);
     const filled = Math.round(ratio * 8);
     const empty = 8 - filled;
-    const bar = "▓".repeat(filled) + "░".repeat(empty);
+    const bar = "🟩".repeat(filled) + "⬜".repeat(empty);
     const emoji = showStatus ? ` ${this.formatStatusEmoji(pct)}` : "";
     return `\n    ${bar} ${pct}%${emoji}`;
   }
@@ -525,7 +525,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     const pct = Math.round(ratio * 100);
     const filled = Math.round(ratio * 8);
     const empty = 8 - filled;
-    const bar = "▓".repeat(filled) + "░".repeat(empty);
+    const bar = "🟩".repeat(filled) + "⬜".repeat(empty);
     return `<b>📊 Today:</b> ${bar} ${pct}% | ${JiraService.formatTime(todaySeconds)} / 7h`;
   }
 
